@@ -7,5 +7,5 @@ export const instant = false;
 
 export default async function ThemePage() {
   const config = await adminConfig();
-  return <ThemeEditor initial={config.theme} />;
+  return <ThemeEditor initial={config.theme} storeName={config.general.storeName} />;
 }

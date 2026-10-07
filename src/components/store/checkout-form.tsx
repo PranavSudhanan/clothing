@@ -15,6 +15,8 @@ import { computeTotals, type CouponRule } from "@/lib/pricing";
 import type { Address } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Notice } from "./forms";
+import { LocationFields, type GeoOption } from "./location-fields";
+import { markPlaced } from "./placed-popup";
 import { useCart, useMoney, useSite } from "./providers";
 import { EmptyState, Picture } from "./ui";
 
@@ -84,7 +86,10 @@ export function PayNowButton({ token }: { token: string }) {
             const request = await retryPaymentAction(token);
             if (!request.ok) return setMessage(request.message);
             const result = await payWithRazorpay(token, request.payment);
-            if (result.ok) router.refresh();
+            if (result.ok) {
+              markPlaced(token);
+              router.refresh();
+            }
             else setMessage(result.message);
           })
         }
@@ -98,16 +103,35 @@ export function PayNowButton({ token }: { token: string }) {
 
 export type CheckoutUser = { name: string; email: string; phone: string; addresses: Address[] } | null;
 
-const EMPTY: Address = { name: "", phone: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "India" };
+const EMPTY: Address = { name: "", phone: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "" };
 
-export function CheckoutForm({ user, cod, online }: { user: CheckoutUser; cod: boolean; online: boolean }) {
+export function CheckoutForm({
+  user,
+  cod,
+  online,
+  countries,
+}: {
+  user: CheckoutUser;
+  cod: boolean;
+  online: boolean;
+  /** The countries the store delivers to, for the country dropdown. */
+  countries: GeoOption[];
+}) {
   const router = useRouter();
   const { lines, ready, clear } = useCart();
   const { commerce } = useSite();
   const money = useMoney();
 
   const saved = user?.addresses ?? [];
-  const [address, setAddress] = useState<Address>(saved[0] ?? { ...EMPTY, name: user?.name ?? "", phone: user?.phone ?? "" });
+  const [address, setAddress] = useState<Address>(
+    saved[0] ?? {
+      ...EMPTY,
+      name: user?.name ?? "",
+      phone: user?.phone ?? "",
+      country: countries[0]?.name ?? "",
+      countryCode: countries[0]?.code,
+    },
+  );
   const [email, setEmail] = useState(user?.email ?? "");
   const [notes, setNotes] = useState("");
   const [method, setMethod] = useState<"cod" | "online">(online ? "online" : "cod");
@@ -157,7 +181,10 @@ export function CheckoutForm({ user, cod, online }: { user: CheckoutUser; cod: b
       // The order now exists (and holds the stock), whatever happens with the payment window.
       setDone(true);
       clear();
-      if (result.payment) await payWithRazorpay(result.token, result.payment);
+      // The popup on the order page is only for orders that are really confirmed:
+      // cash on delivery straight away, online orders once the payment went through.
+      const confirmed = result.payment ? (await payWithRazorpay(result.token, result.payment)).ok : true;
+      if (confirmed) markPlaced(result.token);
       router.push(`/order/${result.token}`);
     });
   }
@@ -271,18 +298,12 @@ export function CheckoutForm({ user, cod, online }: { user: CheckoutUser; cod: b
               </label>
               <input id="co-line2" autoComplete="address-line2" value={address.line2 ?? ""} onChange={set("line2")} className="input" />
             </div>
-            <div>
-              <label className="field-label" htmlFor="co-city">
-                City
-              </label>
-              <input id="co-city" required autoComplete="address-level2" value={address.city} onChange={set("city")} className="input" />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="co-state">
-                State
-              </label>
-              <input id="co-state" required autoComplete="address-level1" value={address.state} onChange={set("state")} className="input" />
-            </div>
+            <LocationFields
+              idPrefix="co"
+              countries={countries}
+              value={address}
+              onChange={(patch) => setAddress((current) => ({ ...current, ...patch }))}
+            />
             <div>
               <label className="field-label" htmlFor="co-pin">
                 PIN code
@@ -296,12 +317,6 @@ export function CheckoutForm({ user, cod, online }: { user: CheckoutUser; cod: b
                 onChange={set("postalCode")}
                 className="input"
               />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="co-country">
-                Country
-              </label>
-              <input id="co-country" required autoComplete="country-name" value={address.country} onChange={set("country")} className="input" />
             </div>
           </div>
         </section>

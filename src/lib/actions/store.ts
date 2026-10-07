@@ -5,12 +5,16 @@ import bcrypt from "bcryptjs";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { getDb, schema, type DB } from "@/db";
 import { createSession, destroySession, getCurrentUser } from "@/lib/auth";
 import { getProducts, getSiteConfig, TAGS, type ProductCardData } from "@/lib/data";
+import { shippingCountries } from "@/lib/geo";
+import { notifyCoutureReceived, notifyOrderPlaced, RESET_LINK_MINUTES, sendPasswordReset } from "@/lib/notify";
 import { computeTotals, type CouponRule } from "@/lib/pricing";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId, verifyPaymentSignature } from "@/lib/razorpay";
+import { siteUrl } from "@/lib/site-url";
 import type { Address, MeasurementProfile, TimelineEntry } from "@/lib/types";
 
 const { coupons, coutureOrders, coutureServices, enquiries, fabrics, orderItems, orders, productVariants, subscribers, users } =
@@ -39,6 +43,8 @@ const addressSchema = z.object({
   state: text(80).min(2, "Enter your state"),
   postalCode: text(12).min(3, "Enter your PIN code"),
   country: text(60).min(2).default("India"),
+  countryCode: text(3).optional(),
+  stateCode: text(10).optional(),
 });
 
 function firstIssue(error: z.ZodError) {
@@ -166,6 +172,13 @@ export async function placeOrderAction(input: z.input<typeof orderSchema>): Prom
     return { ok: false, message: "Online payment is not available right now." };
   }
 
+  const offered = shippingCountries(commerce.shippingCountries);
+  const country =
+    offered.find((c) => c.code === data.address.countryCode?.toUpperCase()) ??
+    offered.find((c) => c.name.toLowerCase() === data.address.country.toLowerCase());
+  if (!country) return { ok: false, message: "Sorry, we do not deliver to that country yet." };
+  const address: Address = { ...data.address, country: country.name, countryCode: country.code };
+
   // Merge duplicate lines, then price everything from the database — never from the browser.
   const wanted = new Map<string, number>();
   for (const item of data.items) wanted.set(item.variantId, (wanted.get(item.variantId) ?? 0) + item.qty);
@@ -235,6 +248,7 @@ export async function placeOrderAction(input: z.input<typeof orderSchema>): Prom
   }
 
   const timeline: TimelineEntry[] = [{ at: now(), status: "pending", note: "Order placed" }];
+  let orderId = "";
 
   try {
     await db.transaction(async (tx) => {
@@ -253,10 +267,10 @@ export async function placeOrderAction(input: z.input<typeof orderSchema>): Prom
           number,
           token,
           userId: user?.id ?? null,
-          name: data.address.name,
+          name: address.name,
           email: data.email,
-          phone: data.address.phone,
-          shippingAddress: data.address as Address,
+          phone: address.phone,
+          shippingAddress: address,
           subtotal: totals.subtotal,
           discount: totals.discount,
           couponCode: coupon?.code ?? "",
@@ -271,6 +285,7 @@ export async function placeOrderAction(input: z.input<typeof orderSchema>): Prom
           timeline,
         })
         .returning({ id: orders.id });
+      orderId = order.id;
 
       await tx.insert(orderItems).values(lines.map((line) => ({ orderId: order.id, ...line })));
 
@@ -306,6 +321,10 @@ export async function placeOrderAction(input: z.input<typeof orderSchema>): Prom
       },
     };
   }
+
+  // Cash on delivery is confirmed straight away. Online orders are confirmed once the payment lands.
+  const base = await siteUrl();
+  after(() => notifyOrderPlaced(orderId, base));
   return { ok: true, token };
 }
 
@@ -344,6 +363,8 @@ export async function confirmPaymentAction(input: z.input<typeof paymentSchema>)
     })
     .where(eq(orders.id, order.id));
 
+  const base = await siteUrl();
+  after(() => notifyOrderPlaced(order.id, base));
   return { ok: true, message: "Payment received." };
 }
 
@@ -471,7 +492,7 @@ export async function submitCoutureAction(
 
   const token = newToken();
   const number = orderNumber("CT");
-  await db.insert(coutureOrders).values({
+  const [created] = await db.insert(coutureOrders).values({
     number,
     token,
     userId: user?.id ?? null,
@@ -493,7 +514,10 @@ export async function submitCoutureAction(
     estimatedPrice: Math.max(estimate, 0),
     status: "requested",
     timeline: [{ at: now(), status: "requested", note: "Request received" }],
-  });
+  }).returning({ id: coutureOrders.id });
+
+  const base = await siteUrl();
+  after(() => notifyCoutureReceived(created.id, base));
 
   if (user && data.saveProfile && data.method === "self") {
     const profile: MeasurementProfile = {
@@ -537,7 +561,7 @@ export async function getProfileAction(): Promise<Profile | null> {
 /* ─── Customer accounts ────────────────────────────────────────────────── */
 
 /** `values` echoes what was typed (never the password) so the form can be refilled after an error. */
-export type FormState = { message: string; values?: Record<string, string> } | null;
+export type FormState = { message: string; values?: Record<string, string>; ok?: boolean } | null;
 
 function typed(formData: FormData, ...names: string[]) {
   return Object.fromEntries(names.map((name) => [name, String(formData.get(name) ?? "").slice(0, 200)]));
@@ -598,6 +622,64 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
 
   await createSession({ uid: user.id, role: "customer" });
   redirect(safeNext(formData.get("next"), "/account"));
+}
+
+/* ─── Password reset ───────────────────────────────────────────────────── */
+
+const hashToken = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
+
+export async function requestPasswordResetAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = email.safeParse(formData.get("email"));
+  if (!parsed.success) return { message: "Enter a valid email address.", values: typed(formData, "email") };
+
+  // The same answer whether or not the account exists, so this form cannot be used to find out who has one.
+  const done: FormState = {
+    ok: true,
+    message: `If an account exists for ${parsed.data}, we have emailed a link to choose a new password. It works for ${RESET_LINK_MINUTES} minutes.`,
+  };
+
+  const db = await getDb();
+  const [user] = await db.select().from(users).where(eq(users.email, parsed.data)).limit(1);
+  if (!user) return done;
+
+  // One link every two minutes is plenty; ignore rapid repeat requests.
+  const issuedAt = user.resetExpiresAt ? user.resetExpiresAt.getTime() - RESET_LINK_MINUTES * 60_000 : 0;
+  if (Date.now() - issuedAt < 2 * 60_000) return done;
+
+  const token = crypto.randomBytes(32).toString("base64url");
+  await db
+    .update(users)
+    .set({ resetTokenHash: hashToken(token), resetExpiresAt: new Date(Date.now() + RESET_LINK_MINUTES * 60_000) })
+    .where(eq(users.id, user.id));
+
+  const base = await siteUrl();
+  await sendPasswordReset({ name: user.name, email: user.email }, `${base}/reset-password?token=${token}`);
+  return done;
+}
+
+export async function resetPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = z
+    .object({
+      token: z.string().min(20).max(200),
+      password: z.string().min(8, "Use at least 8 characters for your password").max(200),
+      confirm: z.string().max(200),
+    })
+    .safeParse({ token: formData.get("token"), password: formData.get("password"), confirm: formData.get("confirm") });
+  if (!parsed.success) return { message: firstIssue(parsed.error) };
+  if (parsed.data.password !== parsed.data.confirm) return { message: "The two passwords do not match." };
+
+  const db = await getDb();
+  const [user] = await db.select().from(users).where(eq(users.resetTokenHash, hashToken(parsed.data.token))).limit(1);
+  if (!user || !user.resetExpiresAt || user.resetExpiresAt.getTime() < Date.now()) {
+    return { message: "This link is no longer valid.", values: { expired: "1" } };
+  }
+
+  await db
+    .update(users)
+    .set({ passwordHash: await bcrypt.hash(parsed.data.password, 10), resetTokenHash: null, resetExpiresAt: null })
+    .where(eq(users.id, user.id));
+
+  redirect(user.role === "admin" ? "/admin/login?reset=1" : "/login?reset=1");
 }
 
 export async function logoutAction() {

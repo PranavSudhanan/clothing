@@ -32,7 +32,7 @@ function previewStyle(theme: ThemeSettings): CSSProperties {
   return { ...vars, ...working, fontSize: `${Math.min(Math.max(Number(theme.baseFontSize) || 16, 13), 20) * 0.8}px` } as CSSProperties;
 }
 
-function Preview({ theme }: { theme: ThemeSettings }) {
+function Preview({ theme, storeName }: { theme: ThemeSettings; storeName: string }) {
   const style = useMemo(() => previewStyle(theme), [theme]);
   const fonts = googleFontsUrl([theme.headingFont, theme.bodyFont]);
   const cards = [
@@ -50,7 +50,7 @@ function Preview({ theme }: { theme: ThemeSettings }) {
         </div>
         <div className={cn("flex items-center border-b border-line px-4 py-3", theme.headerLayout === "center" ? "justify-between" : "gap-6")}>
           {theme.headerLayout === "center" && <span className="text-[0.62em] uppercase tracking-[0.14em]">Shop · Couture</span>}
-          <span className="heading text-[1.5em] tracking-[0.08em]">Atelier</span>
+          <span className="heading text-[1.5em] tracking-[0.08em]">{storeName}</span>
           {theme.headerLayout !== "center" && <span className="flex-1 text-[0.62em] uppercase tracking-[0.14em]">Shop · Couture · Story</span>}
           <span className="flex gap-2.5">
             {theme.headerSearch && <Search size={14} strokeWidth={1.4} />}
@@ -103,15 +103,15 @@ function Preview({ theme }: { theme: ThemeSettings }) {
         </div>
 
         <div className="px-5 py-4 text-[0.68em]" style={{ background: "var(--t-footer-bg)", color: "var(--t-footer-fg)" }}>
-          <span className="heading text-[1.6em] tracking-[0.08em]">Atelier</span>
-          <p className="mt-1 opacity-70">© Atelier. Crafted with care in India.</p>
+          <span className="heading text-[1.6em] tracking-[0.08em]">{storeName}</span>
+          <p className="mt-1 opacity-70">© {storeName}. Crafted with care in India.</p>
         </div>
       </div>
     </div>
   );
 }
 
-export function ThemeEditor({ initial }: { initial: ThemeSettings }) {
+export function ThemeEditor({ initial, storeName }: { initial: ThemeSettings; storeName: string }) {
   const router = useRouter();
   const toast = useToast();
   const [theme, setTheme] = useState<ThemeSettings>(initial);
@@ -243,7 +243,7 @@ export function ThemeEditor({ initial }: { initial: ThemeSettings }) {
         <div>
           <div className="lg:sticky lg:top-6">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Live preview</p>
-            <Preview theme={theme} />
+            <Preview theme={theme} storeName={storeName} />
           </div>
         </div>
       </div>

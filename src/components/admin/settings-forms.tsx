@@ -102,12 +102,39 @@ const TABS = [
   { key: "account", label: "Admin account" },
 ] as const;
 
-export function SettingsView({ config, razorpayReady, blobReady, embeddedDb }: { config: SiteConfig; razorpayReady: boolean; blobReady: boolean; embeddedDb: boolean }) {
+export function SettingsView({
+  config,
+  razorpayReady,
+  blobReady,
+  embeddedDb,
+  emailReady,
+  textProvider,
+}: {
+  config: SiteConfig;
+  razorpayReady: boolean;
+  blobReady: boolean;
+  embeddedDb: boolean;
+  emailReady: boolean;
+  /** Name of the SMS / WhatsApp provider in use, or null when none is set up. */
+  textProvider: string | null;
+}) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("general");
 
   const checks = [
     { ok: !embeddedDb, label: "Database", good: "Connected to Postgres (DATABASE_URL)", bad: "Using the embedded development database — set DATABASE_URL before going live" },
     { ok: razorpayReady, label: "Online payments", good: "Razorpay keys found", bad: "Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to accept UPI and cards" },
+    {
+      ok: emailReady,
+      label: "Emails",
+      good: "SMTP connected — order and account emails are being sent",
+      bad: "Add SMTP_HOST, SMTP_USER, SMTP_PASS and EMAIL_FROM to send order confirmations, shipping updates and password resets",
+    },
+    {
+      ok: Boolean(textProvider),
+      label: "Text messages",
+      good: `Sending through ${textProvider}`,
+      bad: "Add Twilio or MSG91 keys to text customers when they order",
+    },
     { ok: blobReady, label: "Image uploads", good: "Vercel Blob connected", bad: "Uploads are saved locally — connect Vercel Blob before deploying" },
   ];
 

@@ -7,6 +7,7 @@ import { getProfileAction, submitCoutureAction, type Profile } from "@/lib/actio
 import { MEASUREMENT_FIELDS, type MeasurementMethod, type StyleOption } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Notice } from "./forms";
+import { markPlaced } from "./placed-popup";
 import { useMoney } from "./providers";
 
 type FabricOption = { id: string; name: string; material: string; hex: string; image: string; priceDelta: number };
@@ -127,8 +128,12 @@ export function CoutureConfigurator({ service, fabrics }: Props) {
         notes: contact.notes,
         saveProfile: Boolean(profile) && saveProfile,
       });
-      if (result.ok) router.push(`/couture/request/${result.token}`);
-      else setError(result.message);
+      if (result.ok) {
+        markPlaced(result.token);
+        router.push(`/couture/request/${result.token}`);
+      } else {
+        setError(result.message);
+      }
     });
   }
 

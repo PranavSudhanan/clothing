@@ -9,6 +9,9 @@ export type Address = {
   state: string;
   postalCode: string;
   country: string;
+  /** ISO codes behind the country and state dropdowns. Absent on addresses saved before they existed. */
+  countryCode?: string;
+  stateCode?: string;
 };
 
 export type ColorOption = { name: string; hex: string };
@@ -70,6 +73,8 @@ export type CommerceSettings = {
   lowStockThreshold: number;
   deliveryNote: string;
   returnsNote: string;
+  /** ISO country codes offered at checkout. Empty means every country. */
+  shippingCountries: string[];
 };
 
 export type SeoSettings = {

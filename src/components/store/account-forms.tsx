@@ -9,6 +9,8 @@ import {
   loginAction,
   logoutAction,
   registerAction,
+  requestPasswordResetAction,
+  resetPasswordAction,
   saveAddressesAction,
   saveMeasurementsAction,
   trackAction,
@@ -26,6 +28,7 @@ import {
 } from "@/lib/types";
 import { cn, uid } from "@/lib/utils";
 import { Notice } from "./forms";
+import { LocationFields, type GeoOption } from "./location-fields";
 import { StatusBadge } from "./order-parts";
 import { useMoney } from "./providers";
 import { Picture } from "./ui";
@@ -72,12 +75,13 @@ export function TrackForm() {
 
 /* ─── Sign in / register ───────────────────────────────────────────────── */
 
-export function AuthForm({ mode, next }: { mode: "login" | "register"; next: string }) {
+export function AuthForm({ mode, next, notice }: { mode: "login" | "register"; next: string; notice?: string }) {
   const [state, action, pending] = useActionState(mode === "login" ? loginAction : registerAction, null);
 
   return (
     <form action={action} className="grid gap-5">
       <input type="hidden" name="next" value={next} />
+      {notice && !state?.message && <Notice ok>{notice}</Notice>}
       {mode === "register" && (
         <div>
           <label className="field-label" htmlFor="auth-name">
@@ -114,6 +118,13 @@ export function AuthForm({ mode, next }: { mode: "login" | "register"; next: str
           className="input"
         />
         {mode === "register" && <p className="mt-1.5 text-xs text-muted">At least 8 characters.</p>}
+        {mode === "login" && (
+          <p className="mt-2 text-right text-xs">
+            <Link href="/forgot-password" className="text-muted underline underline-offset-4 hover:text-fg">
+              Forgot password?
+            </Link>
+          </p>
+        )}
       </div>
       {state?.message && <Notice ok={false}>{state.message}</Notice>}
       <button type="submit" disabled={pending} className="btn btn-primary btn-block">
@@ -132,16 +143,102 @@ export function AuthForm({ mode, next }: { mode: "login" | "register"; next: str
   );
 }
 
+export function ForgotPasswordForm() {
+  const [state, action, pending] = useActionState(requestPasswordResetAction, null);
+
+  if (state?.ok) {
+    return (
+      <div className="grid gap-5 text-center">
+        <Notice ok>{state.message}</Notice>
+        <p className="text-sm text-muted">Nothing in your inbox after a few minutes? Check the spam folder, or try again.</p>
+        <Link href="/login" className="btn btn-outline btn-block">
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="grid gap-5">
+      <div>
+        <label className="field-label" htmlFor="forgot-email">
+          Email
+        </label>
+        <input
+          id="forgot-email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          defaultValue={state?.values?.email ?? ""}
+          className="input"
+        />
+      </div>
+      {state?.message && <Notice ok={false}>{state.message}</Notice>}
+      <button type="submit" disabled={pending} className="btn btn-primary btn-block">
+        {pending ? "Sending…" : "Email me a reset link"}
+      </button>
+      <p className="text-center text-sm text-muted">
+        Remembered it?{" "}
+        <Link href="/login" className="text-fg underline underline-offset-4">
+          Sign in
+        </Link>
+      </p>
+    </form>
+  );
+}
+
+export function ResetPasswordForm({ token }: { token: string }) {
+  const [state, action, pending] = useActionState(resetPasswordAction, null);
+
+  return (
+    <form action={action} className="grid gap-5">
+      <input type="hidden" name="token" value={token} />
+      <div>
+        <label className="field-label" htmlFor="reset-password">
+          New password
+        </label>
+        <input id="reset-password" name="password" type="password" required minLength={8} autoComplete="new-password" className="input" />
+        <p className="mt-1.5 text-xs text-muted">At least 8 characters.</p>
+      </div>
+      <div>
+        <label className="field-label" htmlFor="reset-confirm">
+          Repeat the new password
+        </label>
+        <input id="reset-confirm" name="confirm" type="password" required minLength={8} autoComplete="new-password" className="input" />
+      </div>
+      {state?.message && (
+        <Notice ok={false}>
+          {state.message}
+          {state.values?.expired && (
+            <>
+              {" "}
+              <Link href="/forgot-password" className="underline underline-offset-4">
+                Request a new link
+              </Link>
+            </>
+          )}
+        </Notice>
+      )}
+      <button type="submit" disabled={pending} className="btn btn-primary btn-block">
+        {pending ? "Saving…" : "Save new password"}
+      </button>
+    </form>
+  );
+}
+
 /* ─── Account dashboard ────────────────────────────────────────────────── */
 
 export type AccountData = {
   user: { name: string; email: string; phone: string; addresses: Address[]; measurements: MeasurementProfile[] };
   orders: { number: string; token: string; date: string; status: string; total: number; items: number; image: string }[];
   couture: { number: string; token: string; date: string; status: string; service: string; price: number }[];
+  /** Countries the store delivers to, for the address dropdowns. */
+  countries: GeoOption[];
 };
 
 const TABS = ["Orders", "Couture", "Addresses", "Measurements", "Profile"] as const;
-const EMPTY_ADDRESS: Address = { name: "", phone: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "India" };
+const EMPTY_ADDRESS: Address = { name: "", phone: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "" };
 
 function useSaver() {
   const [pending, start] = useTransition();
@@ -154,7 +251,7 @@ function useSaver() {
   return { pending, result, run };
 }
 
-function AddressesTab({ initial }: { initial: Address[] }) {
+function AddressesTab({ initial, countries }: { initial: Address[]; countries: GeoOption[] }) {
   const [list, setList] = useState<Address[]>(initial);
   const { pending, result, run } = useSaver();
   const update = (i: number, key: keyof Address, value: string) =>
@@ -165,11 +262,8 @@ function AddressesTab({ initial }: { initial: Address[] }) {
     { key: "phone", label: "Phone" },
     { key: "line1", label: "Address", wide: true },
     { key: "line2", label: "Area / landmark", wide: true },
-    { key: "city", label: "City" },
-    { key: "state", label: "State" },
-    { key: "postalCode", label: "PIN code" },
-    { key: "country", label: "Country" },
   ];
+  const blank: Address = { ...EMPTY_ADDRESS, country: countries[0]?.name ?? "", countryCode: countries[0]?.code };
 
   return (
     <div className="space-y-6">
@@ -194,13 +288,29 @@ function AddressesTab({ initial }: { initial: Address[] }) {
                 <input value={address[field.key] ?? ""} onChange={(e) => update(i, field.key, e.target.value)} className="input" />
               </div>
             ))}
+            <LocationFields
+              idPrefix={`address-${i}`}
+              countries={countries}
+              value={address}
+              onChange={(patch) => setList((current) => current.map((a, idx) => (idx === i ? { ...a, ...patch } : a)))}
+            />
+            <div>
+              <label className="field-label">PIN code</label>
+              <input
+                value={address.postalCode}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                onChange={(e) => update(i, "postalCode", e.target.value)}
+                className="input"
+              />
+            </div>
           </div>
         </div>
       ))}
       {result && <Notice ok={result.ok}>{result.message}</Notice>}
       <div className="flex flex-wrap gap-3">
         {list.length < 5 && (
-          <button type="button" onClick={() => setList([...list, { ...EMPTY_ADDRESS }])} className="btn btn-outline">
+          <button type="button" onClick={() => setList([...list, { ...blank }])} className="btn btn-outline">
             <Plus size={15} /> Add address
           </button>
         )}
@@ -486,7 +596,7 @@ export function AccountView({ data }: { data: AccountData }) {
           </ul>
         ))}
 
-      {tab === "Addresses" && <AddressesTab initial={data.user.addresses} />}
+      {tab === "Addresses" && <AddressesTab initial={data.user.addresses} countries={data.countries} />}
       {tab === "Measurements" && <MeasurementsTab initial={data.user.measurements} />}
       {tab === "Profile" && <ProfileTab user={data.user} />}
     </div>

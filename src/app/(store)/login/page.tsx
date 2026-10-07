@@ -6,13 +6,13 @@ import { getSession } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Sign in", robots: { index: false } };
 
-type Props = { searchParams: Promise<{ next?: string | string[] }> };
+type Props = { searchParams: Promise<{ next?: string | string[]; reset?: string | string[] }> };
 
 async function Form({ searchParams }: Props) {
-  const [{ next }, session] = await Promise.all([searchParams, getSession()]);
+  const [{ next, reset }, session] = await Promise.all([searchParams, getSession()]);
   const target = typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
   if (session) redirect(target);
-  return <AuthForm mode="login" next={target} />;
+  return <AuthForm mode="login" next={target} notice={reset ? "Your password has been changed. Sign in with the new one." : undefined} />;
 }
 
 export default function LoginPage({ searchParams }: Props) {

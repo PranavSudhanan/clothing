@@ -212,7 +212,7 @@ const fontOptions = Object.keys(FONTS).map((name) => ({ value: name, label: name
 
 export const GENERAL_FIELDS: Field[] = [
   { name: "_brand", label: "Brand", type: "heading" },
-  { name: "storeName", label: "Store name", type: "text", width: "half", required: true },
+  { name: "storeName", label: "Store name", type: "text", width: "half", required: true, help: "Your brand name. Shown in the header, footer, admin panel, emails and browser tab." },
   { name: "tagline", label: "Tagline", type: "text", width: "half" },
   { name: "logoUrl", label: "Logo", type: "image", help: "Leave empty to show the store name as text. Use a transparent PNG or SVG." },
   { name: "logoHeight", label: "Logo height (px)", type: "number", width: "half" },
@@ -237,6 +237,7 @@ export const COMMERCE_FIELDS: Field[] = [
   { name: "_shipping", label: "Shipping", type: "heading" },
   { name: "shippingFlat", label: "Flat shipping fee", type: "number", width: "half" },
   { name: "freeShippingAbove", label: "Free shipping above", type: "number", width: "half", help: "0 disables free shipping" },
+  { name: "shippingCountries", label: "Countries you deliver to", type: "tags", placeholder: "IN", help: "Two-letter country codes — IN, AE, US, GB… These appear in the checkout country dropdown. Leave empty to offer every country." },
   { name: "deliveryNote", label: "Delivery note", type: "text", help: "Shown on product pages" },
   { name: "returnsNote", label: "Returns note", type: "text", help: "Shown on product pages" },
   { name: "_tax", label: "Tax", type: "heading" },

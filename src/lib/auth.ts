@@ -27,7 +27,7 @@ export async function getSession(): Promise<Session | null> {
   return verifySession((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
-export type CurrentUser = Omit<schema.User, "passwordHash">;
+export type CurrentUser = Omit<schema.User, "passwordHash" | "resetTokenHash" | "resetExpiresAt">;
 
 /** The signed-in user, always re-read from the database so role changes apply immediately. */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -36,7 +36,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const db = await getDb();
   const [user] = await db.select().from(schema.users).where(eq(schema.users.id, session.uid)).limit(1);
   if (!user) return null;
-  const { passwordHash: _passwordHash, ...safe } = user;
+  const { passwordHash: _passwordHash, resetTokenHash: _resetTokenHash, resetExpiresAt: _resetExpiresAt, ...safe } = user;
   return safe;
 }
 

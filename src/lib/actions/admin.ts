@@ -5,13 +5,16 @@ import path from "node:path";
 import { del } from "@vercel/blob";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { assertAdmin } from "@/lib/auth";
 import { TAGS } from "@/lib/data";
 import { DEFAULT_CONFIG } from "@/lib/defaults";
+import { notifyOrderUpdate } from "@/lib/notify";
 import { SECTION_DEFINITIONS } from "@/lib/sections";
 import { COUTURE_STATUSES, MEASUREMENT_FIELDS, ORDER_STATUSES, PAYMENT_STATUSES, type Section, type SettingKey } from "@/lib/types";
+import { siteUrl } from "@/lib/site-url";
 import { slugify } from "@/lib/utils";
 
 const { banners, categories, coupons, coutureOrders, coutureServices, enquiries, fabrics, media, orders, pages, productVariants, products, settings, subscribers } =
@@ -59,13 +62,40 @@ export async function saveSettingAction(key: SettingKey, value: Record<string, u
   if (JSON.stringify(value).length > 200_000) return { ok: false, message: "That is too much data to save." };
 
   const db = await getDb();
-  await db
-    .insert(settings)
-    .values({ key, value, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+  const save = (name: SettingKey, next: Record<string, unknown>) =>
+    db
+      .insert(settings)
+      .values({ key: name, value: next, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: settings.key, set: { value: next, updatedAt: new Date() } });
+
+  let renamed = false;
+  if (key === "general") {
+    const name = typeof value.storeName === "string" ? value.storeName.trim() : "";
+    if (!name) return { ok: false, message: "Enter a store name." };
+    value = { ...value, storeName: name };
+
+    // The home page's search title and description are stored separately (Settings → SEO).
+    // When the store is renamed, carry the new name into them so the old one does not linger.
+    const rows = await db.select().from(settings).where(inArray(settings.key, ["general", "seo"]));
+    const stored = (wanted: string) => (rows.find((row) => row.key === wanted)?.value ?? {}) as Record<string, unknown>;
+    const previous = typeof stored("general").storeName === "string" ? String(stored("general").storeName) : DEFAULT_CONFIG.general.storeName;
+    if (previous !== name && previous.length >= 3) {
+      renamed = true;
+      const seo = { ...DEFAULT_CONFIG.seo, ...stored("seo") } as Record<string, unknown>;
+      const swap = (text: unknown) => (typeof text === "string" ? text.split(previous).join(name) : text);
+      await save("seo", { ...seo, title: swap(seo.title), description: swap(seo.description) });
+    }
+  }
+
+  await save(key, value);
 
   updateTag(TAGS.site);
-  return { ok: true, message: "Saved. Your storefront is updated." };
+  return {
+    ok: true,
+    message: renamed
+      ? "Saved. The new store name now shows across the storefront, the admin panel, emails and the search title."
+      : "Saved. Your storefront is updated.",
+  };
 }
 
 /* ─── Simple resources (banners, categories, coupons, fabrics, services) ─ */
@@ -381,7 +411,8 @@ const orderPatch = z.object({
 
 const CLOSED = ["cancelled", "returned"];
 
-export async function updateOrderAction(id: string, input: z.input<typeof orderPatch>): Promise<AdminResult> {
+/** `notify` sends the customer an email and text message when the order ships, is delivered or is cancelled. */
+export async function updateOrderAction(id: string, input: z.input<typeof orderPatch>, notify = true): Promise<AdminResult> {
   await assertAdmin();
   const parsed = orderPatch.safeParse(input);
   if (!parsed.success || !z.uuid().safeParse(id).success) return { ok: false, message: "Please check the form." };
@@ -414,6 +445,21 @@ export async function updateOrderAction(id: string, input: z.input<typeof orderP
   });
 
   if (wasClosed !== isClosed) updateTag(TAGS.catalog);
+
+  // Tell the customer about the milestones they care about. A tracking number added to an
+  // order that already shipped counts as a shipping update too.
+  const statusChanged = patch.status !== order.status;
+  const kind =
+    statusChanged && (patch.status === "shipped" || patch.status === "delivered" || patch.status === "cancelled")
+      ? patch.status
+      : patch.status === "shipped" && patch.trackingNumber && patch.trackingNumber !== order.trackingNumber
+        ? "shipped"
+        : null;
+  if (notify && kind) {
+    const base = await siteUrl();
+    after(() => notifyOrderUpdate(id, kind, base));
+    return { ok: true, message: "Order updated. The customer is being notified." };
+  }
   return { ok: true, message: "Order updated." };
 }
 

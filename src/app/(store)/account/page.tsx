@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AccountView, type AccountData } from "@/components/store/account-forms";
 import { requireUser } from "@/lib/auth";
+import { getSiteConfig } from "@/lib/data";
+import { shippingCountries } from "@/lib/geo";
 import { getCoutureOrdersForUser, getOrdersForUser } from "@/lib/orders";
 import { formatDate } from "@/lib/utils";
 
@@ -9,9 +11,10 @@ export const metadata: Metadata = { title: "My account", robots: { index: false 
 
 async function Account() {
   const user = await requireUser("/account");
-  const [orders, couture] = await Promise.all([getOrdersForUser(user.id), getCoutureOrdersForUser(user.id)]);
+  const [orders, couture, config] = await Promise.all([getOrdersForUser(user.id), getCoutureOrdersForUser(user.id), getSiteConfig()]);
 
   const data: AccountData = {
+    countries: shippingCountries(config.commerce.shippingCountries),
     user: { name: user.name, email: user.email, phone: user.phone, addresses: user.addresses, measurements: user.measurements },
     orders: orders.map((order) => ({
       number: order.number,

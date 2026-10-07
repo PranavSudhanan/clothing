@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { CheckoutForm } from "@/components/store/checkout-form";
 import { getCurrentUser } from "@/lib/auth";
 import { getSiteConfig } from "@/lib/data";
+import { shippingCountries } from "@/lib/geo";
 import { razorpayConfigured } from "@/lib/razorpay";
 
 export const metadata: Metadata = { title: "Checkout", robots: { index: false } };
@@ -14,6 +15,7 @@ async function CheckoutLoader() {
       user={user ? { name: user.name, email: user.email, phone: user.phone, addresses: user.addresses } : null}
       cod={config.commerce.codEnabled}
       online={config.commerce.onlineEnabled && razorpayConfigured()}
+      countries={shippingCountries(config.commerce.shippingCountries)}
     />
   );
 }

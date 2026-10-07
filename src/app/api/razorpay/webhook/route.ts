@@ -1,5 +1,8 @@
 import { and, eq } from "drizzle-orm";
+import { after } from "next/server";
 import { getDb, schema } from "@/db";
+import { notifyOrderPlaced } from "@/lib/notify";
+import { siteUrl } from "@/lib/site-url";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 
 /**
@@ -39,6 +42,9 @@ export async function POST(request: Request) {
         timeline: [...order.timeline, { at: new Date().toISOString(), status: "confirmed", note: "Payment received" }],
       })
       .where(eq(schema.orders.id, order.id));
+
+    const base = await siteUrl();
+    after(() => notifyOrderPlaced(order.id, base));
   }
   return Response.json({ ok: true });
 }

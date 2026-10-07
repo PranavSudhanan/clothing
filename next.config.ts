@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   // Native / WASM database drivers must be loaded from node_modules at runtime.
-  serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  serverExternalPackages: ["@electric-sql/pglite", "pg", "nodemailer", "country-state-city"],
   experimental: {
     serverActions: {
       bodySizeLimit: "2mb",

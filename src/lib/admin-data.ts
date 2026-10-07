@@ -19,6 +19,7 @@ const {
   enquiries,
   fabrics,
   media,
+  notifications,
   orders,
   pages,
   productVariants,
@@ -272,4 +273,9 @@ export async function adminInbox() {
 export async function adminMedia() {
   const db = await adminDb();
   return db.select().from(media).orderBy(desc(media.createdAt)).limit(300);
+}
+
+export async function adminNotifications() {
+  const db = await adminDb();
+  return db.select().from(notifications).orderBy(desc(notifications.createdAt)).limit(200);
 }

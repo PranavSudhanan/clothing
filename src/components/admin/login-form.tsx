@@ -1,19 +1,33 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction } from "@/lib/actions/store";
 
-export function AdminLoginForm() {
+export function AdminLoginForm({ notice }: { notice?: string }) {
   const [state, action, pending] = useActionState(loginAction, null);
 
   return (
     <form action={action} className="grid gap-4">
       <input type="hidden" name="scope" value="admin" />
+      {notice && !state?.message && (
+        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] text-emerald-800">
+          {notice}
+        </p>
+      )}
       <div>
         <label htmlFor="admin-email" className="a-label">
           Email
         </label>
-        <input id="admin-email" name="email" type="email" required autoComplete="username" defaultValue={state?.values?.email ?? ""} className="a-input" />
+        <input
+          id="admin-email"
+          name="email"
+          type="email"
+          required
+          autoComplete="username"
+          defaultValue={state?.values?.email ?? ""}
+          className="a-input"
+        />
       </div>
       <div>
         <label htmlFor="admin-password" className="a-label">
@@ -29,6 +43,9 @@ export function AdminLoginForm() {
       <button type="submit" disabled={pending} className="a-btn a-btn-primary !min-h-10 w-full">
         {pending ? "Signing in…" : "Sign in"}
       </button>
+      <Link href="/forgot-password" className="text-center text-[13px] text-zinc-500 hover:text-zinc-900">
+        Forgot password?
+      </Link>
     </form>
   );
 }

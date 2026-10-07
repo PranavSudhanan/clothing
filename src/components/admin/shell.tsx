@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bell,
   Boxes,
   ExternalLink,
   FileText,
@@ -12,6 +13,7 @@ import {
   Menu,
   Navigation,
   Palette,
+  Pencil,
   Ruler,
   Scissors,
   Settings,
@@ -42,6 +44,7 @@ const NAV: { title?: string; items: Item[] }[] = [
       { href: "/admin/customers", label: "Customers", icon: Users },
       { href: "/admin/coupons", label: "Coupons", icon: Ticket },
       { href: "/admin/inbox", label: "Inbox", icon: Inbox },
+      { href: "/admin/notifications", label: "Notifications", icon: Bell },
     ],
   },
   {
@@ -112,12 +115,18 @@ export function AdminShell({ storeName, userName, children }: { storeName: strin
   const [open, setOpen] = useState(false);
 
   const brand = (
-    <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-zinc-200 px-5">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-[13px] font-semibold text-white">
+    <Link
+      href="/admin/settings"
+      onClick={() => setOpen(false)}
+      title="Change the store name, logo and contact details"
+      className="group flex h-14 shrink-0 items-center gap-2.5 border-b border-zinc-200 px-5 transition-colors hover:bg-zinc-50"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-[13px] font-semibold text-white">
         {storeName.slice(0, 1).toUpperCase()}
       </span>
       <span className="truncate text-[14px] font-semibold">{storeName}</span>
-    </div>
+      <Pencil size={13} className="ml-auto shrink-0 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+    </Link>
   );
 
   const footer = (

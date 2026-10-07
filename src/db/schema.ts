@@ -33,6 +33,9 @@ export const users = pgTable("users", {
   role: text("role").$type<"admin" | "customer">().notNull().default("customer"),
   addresses: jsonb("addresses").$type<Address[]>().notNull().default([]),
   measurements: jsonb("measurements").$type<MeasurementProfile[]>().notNull().default([]),
+  /** SHA-256 of the password-reset token; the token itself only ever exists in the emailed link. */
+  resetTokenHash: text("reset_token_hash"),
+  resetExpiresAt: timestamp("reset_expires_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -285,6 +288,23 @@ export const media = pgTable("media", {
   createdAt: createdAt(),
 });
 
+/** A record of every email and text message the store tried to send. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channel: text("channel").$type<"email" | "sms" | "whatsapp">().notNull(),
+    event: text("event").notNull(),
+    recipient: text("recipient").notNull(),
+    subject: text("subject").notNull().default(""),
+    status: text("status").$type<"sent" | "failed" | "skipped">().notNull(),
+    error: text("error").notNull().default(""),
+    reference: text("reference").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_created_idx").on(t.createdAt)],
+);
+
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
@@ -321,3 +341,4 @@ export type CoutureService = typeof coutureServices.$inferSelect;
 export type CoutureOrder = typeof coutureOrders.$inferSelect;
 export type Enquiry = typeof enquiries.$inferSelect;
 export type Media = typeof media.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

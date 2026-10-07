@@ -232,6 +232,7 @@ export const DEFAULT_CONFIG: SiteConfig = {
     lowStockThreshold: 5,
     deliveryNote: "Dispatched within 24 hours. Delivered in 3 – 6 business days.",
     returnsNote: "Easy 7-day returns and exchanges on ready-to-wear.",
+    shippingCountries: ["IN"],
   },
   seo: {
     title: "Atelier — Ready-to-wear & bespoke menswear",

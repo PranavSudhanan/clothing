@@ -35,6 +35,8 @@ To start again from the demo content, stop the server and delete the `.data` fol
    | `NEXT_PUBLIC_SITE_URL` | recommended | Your live URL, e.g. `https://www.yourbrand.com` (sitemap and social previews) |
    | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | optional | Enables online payments. Without them only cash on delivery is offered |
    | `RAZORPAY_WEBHOOK_SECRET` | optional | See `.env.example` |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | recommended | Sends order confirmations, shipping updates and password resets. Any SMTP provider works (Gmail, Zoho, Brevo, Resend…) |
+   | `TWILIO_…` or `MSG91_…` | optional | Text messages (and WhatsApp through Twilio). See `.env.example` |
 
 4. **Deploy.** The build runs `scripts/db-setup.ts` first, which applies the migrations in `drizzle/`, adds demo content to an empty database and creates the admin account.
 5. **Enable image uploads:** in Vercel open **Storage → Create → Blob**, connect it to the project (this adds `BLOB_READ_WRITE_TOKEN`) and redeploy. Until then you can still paste image URLs anywhere an image is needed.
@@ -54,16 +56,34 @@ Instead of copying the connection string by hand you can add Neon from the Verce
 | **Couture** | Services with their own style options, price differences, measurement form and lead time; fabric library with surcharges |
 | **Orders** | Status, payment, tracking number and link, internal notes. Cancelling an order returns its stock |
 | **Couture orders** | Full specification and measurements, final quote, advance received, fitting date, workshop stage |
-| **Also** | Customers, coupons, contact messages, newsletter subscribers (CSV export), media library, store settings, shipping, tax, SEO |
+| **Notifications** | A log of every email and text message sent (and why any failed), plus a preview of each email |
+| **Also** | Customers, coupons, contact messages, newsletter subscribers (CSV export), media library, store settings, delivery countries, shipping, tax, SEO |
 
 ## What customers get
 
 - Catalogue with category pages, search, filters (size, colour, price), sorting and pagination
 - Product pages with gallery, variant selection, live stock, size guide, wishlist
-- Cart, coupon codes, guest or signed-in checkout, cash on delivery and Razorpay
+- Cart, coupon codes, guest or signed-in checkout with country, state and city dropdowns, cash on delivery and Razorpay
+- An “order placed” popup, a confirmation email and (if set up) a text message as soon as the order goes through
 - Order confirmation and tracking pages, plus look-up by order number and email
 - Couture configurator: choose fabric → style options → how to be measured (enter measurements, studio visit, home visit or send a garment) → details, with a live price estimate
-- Accounts with order history, saved addresses and reusable measurement profiles
+- Accounts with order history, saved addresses, reusable measurement profiles and “forgot password” by email
+
+## Emails and text messages
+
+| Message | Sent when | Email | Text |
+| --- | --- | --- | --- |
+| Order confirmation | An order is placed (or paid, for online payments) | yes | yes |
+| Shipping update | You mark an order as shipped, or add a tracking number later | yes | yes |
+| Delivered / cancelled | You change the order status (untick “Notify the customer” to skip) | yes | yes |
+| Couture request received | A client submits the couture configurator | yes | yes |
+| Password reset | Someone uses “Forgot password” (link works once, for 60 minutes) | yes | — |
+
+- **Email** goes out over SMTP, so any provider works. Fill in the `SMTP_…` and `EMAIL_FROM` variables; examples for Gmail, Zoho, Brevo and Resend are in `.env.example`.
+- **Text messages** use Twilio (SMS, plus WhatsApp if you add a WhatsApp sender) or MSG91. In India every SMS must match a DLT-approved template: with MSG91 you register one template per message and put its id in `MSG91_TEMPLATE_…`; with Twilio the wording in `src/lib/notify/templates.ts` must match your approved templates.
+- Until email is set up nothing is sent; in development the message (including reset links) is printed in the terminal instead.
+- **Admin → Notifications** shows what was sent and previews every email. Wording and layout live in `src/lib/notify/templates.ts`; emails pick up your store name, logo and theme colours automatically.
+- Set `NEXT_PUBLIC_SITE_URL` in production so links inside messages point at your real domain.
 
 ## Project layout
 
@@ -81,6 +101,8 @@ src/
     data.ts           cached public reads (tagged, invalidated by admin saves)
     admin-data.ts     admin reads (each one checks the admin session)
     actions/          server actions: store.ts (checkout, couture, accounts), admin.ts
+    notify/           emails and text messages: templates, SMTP / SMS delivery, log
+    geo.ts            country, state and city lists for the address dropdowns
     sections.ts       section catalogue used by the page builder
     resources.ts      form and table definitions for the admin panel
     defaults.ts       default settings, fonts and theme presets
@@ -104,4 +126,5 @@ scripts/db-setup.ts   migrate + seed (runs before every build)
 - **Caching:** storefront pages are prerendered and cached; saving anything in the admin panel refreshes the affected pages immediately.
 - **Adding a section type:** describe its fields in `src/lib/sections.ts` and render it in `src/components/store/sections.tsx`. The page builder picks it up automatically.
 - **Changing the database schema:** edit `src/db/schema.ts`, run `npm run db:generate`, commit the new file in `drizzle/`. It is applied on the next build.
-- **Not included yet:** transactional emails (order confirmations), product reviews and login rate limiting.
+- **Delivery countries:** Settings → Checkout & shipping → “Countries you deliver to” controls the country dropdown (India by default).
+- **Not included yet:** product reviews and login rate limiting.

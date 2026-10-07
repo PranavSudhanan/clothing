@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { InfoCard, ProgressTracker, StatusBadge } from "@/components/store/order-parts";
+import { PlacedPopup } from "@/components/store/placed-popup";
 import { Money } from "@/components/store/providers";
+import { emailConfigured, smsProvider, whatsappConfigured } from "@/lib/notify";
 import { getCoutureOrderByToken } from "@/lib/orders";
 import {
   COUTURE_STATUSES,
@@ -36,6 +38,16 @@ async function RequestView({ params }: { params: Promise<{ token: string }> }) {
 
   return (
     <div className="container-page py-10 md:py-16">
+      <PlacedPopup
+        token={order.token}
+        kind="couture"
+        number={order.number}
+        name={order.name}
+        email={order.email}
+        phone={order.phone}
+        emailed={emailConfigured()}
+        texted={Boolean(smsProvider()) || whatsappConfigured()}
+      />
       <div className="mx-auto max-w-4xl">
         <p className="eyebrow mb-3">Couture request {order.number}</p>
         <h1 className="text-4xl md:text-5xl">

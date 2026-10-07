@@ -34,22 +34,27 @@ export function OrderEditor({
   const router = useRouter();
   const toast = useToast();
   const [values, setValues] = useState(initial);
+  const [notify, setNotify] = useState(true);
   const [pending, start] = useTransition();
   const set = (key: keyof typeof initial) => (event: { target: { value: string } }) => setValues({ ...values, [key]: event.target.value });
 
   function save() {
     start(async () => {
-      const result = await updateOrderAction(id, {
-        ...values,
-        status: values.status as OrderStatus,
-        paymentStatus: values.paymentStatus as PaymentStatus,
-      });
+      const result = await updateOrderAction(
+        id,
+        { ...values, status: values.status as OrderStatus, paymentStatus: values.paymentStatus as PaymentStatus },
+        notify,
+      );
       toast(result);
       if (result.ok) router.refresh();
     });
   }
 
   const closing = ["cancelled", "returned"].includes(values.status) && !["cancelled", "returned"].includes(initial.status);
+  // The moments a customer hears from us: shipped, delivered, cancelled, or a tracking number added later.
+  const milestone =
+    (values.status !== initial.status && ["shipped", "delivered", "cancelled"].includes(values.status)) ||
+    (values.status === "shipped" && values.trackingNumber !== "" && values.trackingNumber !== initial.trackingNumber);
 
   return (
     <div className="grid gap-4">
@@ -89,6 +94,15 @@ export function OrderEditor({
         <label className="a-label">Internal notes</label>
         <textarea value={values.adminNotes} onChange={set("adminNotes")} rows={3} className="a-input" placeholder="Only visible to your team" />
       </div>
+      {milestone && (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-zinc-200 px-3 py-2.5 text-[13.5px]">
+          <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-zinc-900" />
+          <span>
+            <span className="block font-medium">Notify the customer</span>
+            <span className="text-xs text-zinc-500">Sends the {values.status} email and text message when you save.</span>
+          </span>
+        </label>
+      )}
       <button type="button" disabled={pending} onClick={save} className="a-btn a-btn-primary">
         {pending ? "Saving…" : "Save changes"}
       </button>
