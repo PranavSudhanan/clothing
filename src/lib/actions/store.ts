@@ -14,6 +14,7 @@ import { shippingCountries } from "@/lib/geo";
 import { notifyCoutureReceived, notifyOrderPlaced, RESET_LINK_MINUTES, sendPasswordReset } from "@/lib/notify";
 import { computeTotals, type CouponRule } from "@/lib/pricing";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId, verifyPaymentSignature } from "@/lib/razorpay";
+import { sessionConfigured } from "@/lib/session-token";
 import { siteUrl } from "@/lib/site-url";
 import type { Address, MeasurementProfile, TimelineEntry } from "@/lib/types";
 
@@ -574,6 +575,13 @@ function safeNext(next: FormDataEntryValue | null, fallback: string) {
 
 const loginSchema = z.object({ email, password: z.string().min(1, "Enter your password").max(200) });
 
+/** What to tell someone when this server has no SESSION_SECRET and so cannot sign anyone in. */
+function signInUnavailable(admin: boolean) {
+  return admin
+    ? "Sign-in is not set up on this server yet. Add SESSION_SECRET (a random string of 16+ characters) to the environment variables, then redeploy."
+    : "Sign-in is temporarily unavailable. Please try again later.";
+}
+
 export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const values = typed(formData, "email");
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
@@ -588,6 +596,8 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
 
   const adminOnly = formData.get("scope") === "admin";
   if (adminOnly && user.role !== "admin") return { message: "This account does not have admin access.", values };
+  // Only someone who has just proved they are an admin is told what is misconfigured.
+  if (!sessionConfigured()) return { message: signInUnavailable(user.role === "admin"), values };
 
   await createSession({ uid: user.id, role: user.role });
   redirect(adminOnly ? "/admin" : safeNext(formData.get("next"), "/account"));
@@ -609,6 +619,9 @@ export async function registerAction(_prev: FormState, formData: FormData): Prom
   });
   const values = typed(formData, "name", "email", "phone");
   if (!parsed.success) return { message: firstIssue(parsed.error), values };
+
+  // Check before creating the account, so nobody ends up registered but unable to sign in.
+  if (!sessionConfigured()) return { message: signInUnavailable(false), values };
 
   const db = await getDb();
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, parsed.data.email)).limit(1);

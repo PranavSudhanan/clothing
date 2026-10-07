@@ -7,6 +7,11 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 export type Session = { uid: string; role: "admin" | "customer" };
 
+/** False when SESSION_SECRET is missing or too short, i.e. nobody can be signed in on this server. */
+export function sessionConfigured() {
+  return (process.env.SESSION_SECRET ?? "").length >= 16 || process.env.NODE_ENV === "development";
+}
+
 function signingKey() {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 16) {

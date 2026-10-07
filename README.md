@@ -120,6 +120,17 @@ scripts/db-setup.ts   migrate + seed (runs before every build)
 | `npm run db:generate` | Create a new migration after editing `src/db/schema.ts` |
 | `npm run lint` / `npm run typecheck` | Code checks |
 
+## Troubleshooting a deployment
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| Signing in shows “This page couldn’t load” or “Sign-in is not set up on this server yet” | `SESSION_SECRET` is missing or shorter than 16 characters | Add it under Vercel → Project → Settings → Environment Variables, then redeploy |
+| Admin sign-in page says “No admin account exists yet”, or always answers “Incorrect email or password” | `ADMIN_EMAIL` / `ADMIN_PASSWORD` were not set when the database was first set up | Add both and redeploy; the account is created during the build |
+| Build fails with “DATABASE_URL is not set” | The Neon connection string is missing | Add `DATABASE_URL` and redeploy |
+| Image upload says it needs Vercel Blob | No Blob store is connected | Storage → Create → Blob, connect it to the project, redeploy |
+
+Environment variable changes only take effect on the **next deployment** — use Deployments → ⋯ → Redeploy after changing them. The admin sign-in page lists anything that is still missing.
+
 ## Good to know
 
 - **Prices** are entered in whole currency units (for example `2499`). The currency and number format are set under Settings → Checkout & shipping.

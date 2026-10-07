@@ -10,6 +10,15 @@ loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 
+  // Nobody can sign in without it, so make the gap impossible to miss in the build log.
+  if (process.env.VERCEL && (process.env.SESSION_SECRET ?? "").length < 16) {
+    console.warn(
+      "\n[setup] WARNING: SESSION_SECRET is missing or shorter than 16 characters.\n" +
+        "        Admin and customer sign-in will not work until you add it in\n" +
+        "        Vercel → Project → Settings → Environment Variables and redeploy.\n",
+    );
+  }
+
   if (!url) {
     if (process.env.VERCEL) {
       throw new Error(
